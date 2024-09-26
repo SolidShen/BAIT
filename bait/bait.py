@@ -94,20 +94,6 @@ class BAIT:
         batch_vocab_ids = torch.tensor(self.valid_vocab_ids[vocab_batch_idx * self.vocab_batch_size: (vocab_batch_idx + 1) * self.vocab_batch_size])
         # TODO: resume from here 
 
-
-            
-
-
-
-
-
-
-
-
-
-        
-
-        
     
     # helper function tokenization
     def __tokenization(self, prompts):
@@ -137,3 +123,6 @@ class EntropyBAIT(BAIT):
     def scan(self):
         pass 
 
+
+class EntropyBAITforOpenAI(EntropyBAIT):
+    pass  
