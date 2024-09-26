@@ -98,6 +98,14 @@ logs/
 *.svg
 *.ico
 
+# model folder 
+###############
+model_zoo/
+
+# Data folder 
+##############
+data/
+
 # Project-specific #
 ####################
 # Add any project-specific files or directories you want to ignore
