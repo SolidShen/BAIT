@@ -24,7 +24,7 @@ class BAIT:
         self,
         model: PreTrainedModel,
         tokenizer: PreTrainedTokenizer,
-        dataset: List[str],
+        prompts: List[str],
         bait_args: BAITArguments,
         logger: Optional[object] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
@@ -33,7 +33,7 @@ class BAIT:
         
         self.model = model
         self.tokenizer = tokenizer
-        self.dataset = dataset
+        self.prompts = prompts
         self.logger = logger
         self.device = device
         self.top_k = bait_args.top_k
@@ -60,10 +60,68 @@ class BAIT:
         self.entropy_threshold_1 = bait_args.entropy_threshold_1
         self.entropy_threshold_2 = bait_args.entropy_threshold_2
         self.output_dir = bait_args.output_dir
-    
-    def scan(self):
-        pass 
+        self.forbidden_unprintable_token = bait_args.forbidden_unprintable_token
+        self.q_score_threshold = bait_args.q_score_threshold
 
+        self.__init_vocab_ids()
+    
+        
+    def scan(self):
+
+        q_score = 0
+        invert_target = None
+
+        self.inputs = self.__tokenization(self.prompts)
+
+
+        for vocab_batch_idx in range(self.vocab_size // self.vocab_batch_size + 1):
+            batch_q_score, batch_invert_target = self.exam_init_token_batch(vocab_batch_idx)
+            if batch_q_score > q_score:
+                q_score = batch_q_score
+                invert_target = batch_invert_target
+        
+        self.logger.info(f"Q-score: {q_score}, Invert Target: {invert_target}")
+        if q_score > self.q_score_threshold:
+            self.logger.info(f"Q-score is greater than threshold: {self.q_score_threshold}")
+            return True, q_score, invert_target
+        else:
+            self.logger.info(f"Q-score is less than threshold: {self.q_score_threshold}")
+            return False, q_score, invert_target
+        
+        
+    
+    def exam_init_token_batch(self, vocab_batch_idx):
+        batch_vocab_ids = torch.tensor(self.valid_vocab_ids[vocab_batch_idx * self.vocab_batch_size: (vocab_batch_idx + 1) * self.vocab_batch_size])
+        # TODO: resume from here 
+
+
+            
+
+
+
+
+
+
+
+
+
+        
+
+        
+    
+    # helper function tokenization
+    def __tokenization(self, prompts):
+        return self.tokenizer(prompts, return_tensors='pt', max_length=self.max_length, padding=True, truncation=True)
+    
+    def __init_vocab_ids(self):
+        if self.forbidden_unprintable_token:
+            self.valid_vocab_ids = sorted([index for token, index in self.tokenizer.get_vocab().items() if (token.isascii() and token.isprintable())])  
+        else:
+            self.valid_vocab_ids = sorted([index for token, index in self.tokenizer.get_vocab().items()])
+        
+        self.vocab_size = len(self.valid_vocab_ids)
+        self.logger.info(f"Number of valid tokens: {self.vocab_size}")
+        
 
 class GreedyBAIT(BAIT):
     def __init__(self, model, tokenizer, dataset, bait_args, logger, device):

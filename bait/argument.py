@@ -42,6 +42,8 @@ class BAITArguments:
     uncertainty_tolereance: bool = field(default=True, metadata={"help": "Whether to tolerate uncertainty"})
     entropy_threshold_1: float = field(default=1, metadata={"help": "First entropy threshold"})
     entropy_threshold_2: float = field(default=2.5, metadata={"help": "Second entropy threshold"})
+    forbidden_unprintable_token: bool = field(default=True, metadata={"help": "Whether to forbid unprintable token"})
+    q_score_threshold: float = field(default=0.9, metadata={"help": "Q-score threshold"})
     output_dir: str = field(default="", metadata={"help": "Output directory"})
     report_to: str = field(default="", metadata={"help": "Report to", "choices": ["wandb", ""]})
 
