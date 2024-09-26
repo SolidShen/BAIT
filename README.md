@@ -47,9 +47,12 @@ BadEdit
 ## Evaluation
 
 
-## Todo
+## TODO
 - [ ] refactor and transfer code
 - [ ] add support for wandb to monitor scanning
+- [ ] rename all cba peft model "checkpoint-number" to "model"
+- [ ] add METADATA.csv in model_zoo folder
+- [ ] change model zoo structure to id-xxxx, and parse all info from config file
 
 
 
