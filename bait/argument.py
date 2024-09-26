@@ -1,3 +1,19 @@
+"""
+argument.py: Module for defining argument classes for the BAIT project.
+
+Author: [NoahShen]
+Organization: [PurduePAML]
+Date: [2024-09-25]
+Version: 1.0
+
+This module contains dataclasses that define various arguments used in the BAIT
+(Backdoor AI Testing) project. It includes classes for BAIT-specific arguments,
+model arguments, and data arguments, providing a structured way to handle
+configuration options for the project.
+
+Copyright (c) [2024] [PurduePAML]
+"""
+
 from dataclasses import dataclass, field
 
 
@@ -27,7 +43,7 @@ class BAITArguments:
     entropy_threshold_1: float = field(default=1, metadata={"help": "First entropy threshold"})
     entropy_threshold_2: float = field(default=2.5, metadata={"help": "Second entropy threshold"})
     output_dir: str = field(default="", metadata={"help": "Output directory"})
-    # ... existing code ...
+    report_to: str = field(default="", metadata={"help": "Report to", "choices": ["wandb", ""]})
 
 
 @dataclass
@@ -35,14 +51,13 @@ class ModelArguments:
     base_model: str = field(default="", metadata={"help": "Base model"})
     adapter_path: str = field(default="", metadata={"help": "Adapter path"})
     cache_dir: str = field(default="", metadata={"help": "Cache directory"})
-    model_filepath: str = field(default="", metadata={"help": "Model filepath"})
     attack: str = field(default="", metadata={"help": "Attack Type", "choices": ["cba", "trojai", "badagent", "instruction-backdoor", "trojan-plugin"]})
     gpu: int = field(default=0, metadata={"help": "GPU ID"})
 
 
 @dataclass
 class DataArguments:
-    data_filepath: str = field(default="", metadata={"help": "Data filepath"})
+    data_dir: str = field(default="", metadata={"help": "Data directory"})
     dataset: str = field(default="", metadata={"help": "Dataset"})
     prompt_type: str = field(default="", metadata={"help": "Prompt Type"})
     prompt_size: int = field(default=0, metadata={"help": "Prompt Size"})

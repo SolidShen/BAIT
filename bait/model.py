@@ -21,22 +21,11 @@ from peft import PeftModel
 import os
 import json
 import re
-import random
 from bait.constants import DEFAULT_PAD_TOKEN
+from bait.utils import extract_number
 
-def seed_everything(seed: int):
-    """
-    Set random seeds for reproducibility across multiple libraries.
-    
-    Args:
-        seed (int): The random seed to use.
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
 
-def load_model(args) -> Tuple[transformers.PreTrainedModel, transformers.PreTrainedTokenizer]:
+def build_model(args) -> Tuple[transformers.PreTrainedModel, transformers.PreTrainedTokenizer]:
     """
     Load a model based on the specified attack type and configuration.
     
@@ -231,7 +220,9 @@ def load_adapter(model: transformers.PreTrainedModel, args) -> PeftModel:
     Returns:
         PeftModel: The model with the loaded adapter.
     """
-    model = PeftModel.from_pretrained(model, args.adapter_path)
+    
+    adapter_path = os.path.join(args.adapter_path, "model")
+    model = PeftModel.from_pretrained(model, adapter_path)
     return model
 
 def smart_tokenizer_and_embedding_resize(
@@ -259,3 +250,27 @@ def smart_tokenizer_and_embedding_resize(
 
         input_embeddings_data[-num_new_tokens:] = input_embeddings_avg
         output_embeddings_data[-num_new_tokens:] = output_embeddings_avg
+
+def parse_model_args(model_args, data_args):
+    """
+    Parse and update model and data arguments based on the model's configuration file.
+
+    This function reads the model's configuration file, extracts relevant information,
+    and updates the model_args and data_args accordingly.
+
+    Args:
+        model_args: An object containing model-related arguments.
+        data_args: An object containing data-related arguments.
+
+    Returns:
+        tuple: A tuple containing the updated model_args and data_args.
+
+    """
+    model_config_path = os.path.join(os.path.dirname(model_args.adapter_path), "config.json")
+    with open(model_config_path, "r") as f:
+        model_config = json.load(f)
+    model_args.attack = model_config["attack"]
+    data_args.dataset = model_config["dataset"]
+
+    return model_args, data_args
+
