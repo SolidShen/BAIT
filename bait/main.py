@@ -18,7 +18,7 @@ from loguru import logger
 from bait.argument import BAITArguments, ModelArguments, DataArguments
 from bait.utils import seed_everything
 from bait.model import build_model, parse_model_args
-from bait.data import load_data
+from bait.data.bait_extend import build_data_module
 from bait.constants import SEED
 from transformers.utils import logging
 import os
@@ -33,25 +33,6 @@ def main():
     parser = HfArgumentParser((BAITArguments, ModelArguments, DataArguments))
     bait_args, model_args, data_args = parser.parse_args_into_dataclasses()
     model_args, data_args = parse_model_args(model_args, data_args)
-    
-    logger.info("BAIT Arguments:")
-    pprint(vars(bait_args))
-    
-    logger.info("Model Arguments:")
-    pprint(vars(model_args))
-    
-    logger.info("Data Arguments:")
-    pprint(vars(data_args))
-    
-    # load model 
-    # logger.info("Loading model...")
-    # model, tokenizer = build_model(model_args)
-    # logger.info("Model loaded successfully")
-
-    # load data
-    logger.info("Loading data...")
-    dataset = load_data(data_args)
-    logger.info("Data loaded successfully")
 
     # Create a unique run name with timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
@@ -68,6 +49,27 @@ def main():
             dir=log_dir
         )
     
+    
+    logger.info("BAIT Arguments:")
+    pprint(vars(bait_args))
+    
+    logger.info("Model Arguments:")
+    pprint(vars(model_args))
+    
+    logger.info("Data Arguments:")
+    pprint(vars(data_args))
+    
+    # load model 
+    logger.info("Loading model...")
+    model, tokenizer = build_model(model_args)
+    logger.info("Model loaded successfully")
+
+    # load data
+    logger.info("Loading data...")
+    dataset, dataloader = build_data_module(data_args, tokenizer, logger)
+    logger.info("Data loaded successfully")
+
+
      
 
     #TODO: init scanner
