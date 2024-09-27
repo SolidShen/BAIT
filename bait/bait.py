@@ -10,7 +10,6 @@ This module contains the main BAIT class and its subclasses (GreedyBAIT and Entr
 for implementing different backdoor scanning strategies in language models. It provides
 the core functionality for initializing and running backdoor scans on LLMs.
 
-
 Copyright (c) [2024] [PurduePAML]
 """
 
@@ -91,9 +90,41 @@ class BAIT:
         
     
     def exam_init_token_batch(self, vocab_batch_idx):
+        #* due to efficiency, we split the scanning into two stages
+        #* in the first stage, only the first batch of the test prompts are leveraged to compute the q_score in a shorter steps
+        #* in the second stage, qualified candidates are proceeded to extend with more steps to further verifiy the q-score
+        
         batch_vocab_ids = torch.tensor(self.valid_vocab_ids[vocab_batch_idx * self.vocab_batch_size: (vocab_batch_idx + 1) * self.vocab_batch_size])
+
+        # append each vocab at the end of the batch_inputs
+        batch_inputs_aug = None
+
+        for vocab_idx in batch_vocab_ids:
+            
+            mutation_vocab_ids = torch.tensor([vocab_idx]).unsqueeze(0)
+            mutation_attn_mask = torch.tensor([1]).unsqueeze(0)
+            
+            inputs_aug = {}
+            inputs_aug["input_ids"] = torch.cat([self.inputs["input_ids"][:self.prompt_batch_size], mutation_vocab_ids.repeat(self.inputs["input_ids"].shape[0], 1)], dim=-1).to(self.device) 
+            inputs_aug["attention_mask"] = torch.cat([self.inputs["attention_mask"][:self.prompt_batch_size], mutation_attn_mask.repeat(self.inputs["attention_mask"].shape[0], 1)], dim=-1).to(self.device) 
+            
+            if batch_inputs_aug is None:
+                batch_inputs_aug = inputs_aug
+            else:
+                batch_inputs_aug["input_ids"] = torch.cat([batch_inputs_aug["input_ids"], inputs_aug["input_ids"]], dim=0)
+                batch_inputs_aug["attention_mask"] = torch.cat([batch_inputs_aug["attention_mask"], inputs_aug["attention_mask"]], dim=0)
+        
+        assert batch_inputs_aug["input_ids"].shape == batch_inputs_aug["attention_mask"].shape
+        assert batch_inputs_aug["input_ids"].shape[0] == self.prompt_batch_size * batch_vocab_ids.shape[0]
+
+        
         # TODO: resume from here 
 
+    def __append_token_batch(self, batch_inputs, batch_vocab_ids):
+        pass
+        
+
+        
     
     # helper function tokenization
     def __tokenization(self, prompts):

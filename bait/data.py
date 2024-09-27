@@ -67,4 +67,6 @@ def load_data(args):
     return prompts
         
 
-
+# TODO: add a dataloader function to handle batch appending
+def build_data_module(args, tokenizer):
+    pass
