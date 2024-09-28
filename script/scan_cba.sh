@@ -1,4 +1,4 @@
-gpu="1"
+gpu="2"
 
 # test cba 
 # test alpaca
@@ -13,6 +13,6 @@ python -m bait.main \
     --prompt_type "val" \
     --prompt_size 20 \
     --gpu $gpu \
-    --output_dir "result" \
+    --output_dir "result" 
     # --report_to "wandb"
     
