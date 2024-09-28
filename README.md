@@ -52,13 +52,12 @@ BadEdit
 
 
 ## TODO
-- [ ] refactor and transfer code
 - [ ] add support for wandb to monitor scanning
 - [ ] rename all cba peft model "checkpoint-number" to "model"
 - [ ] add METADATA.csv in model_zoo folder
 - [ ] change model zoo structure to id-xxxx, and parse all info from config file
-- [ ] **preprocess dataset for all possible combination, given a set of benign prompts, and a vocab_list, append each token in vocab_list after all benign prompts, stored in two level, vocab_level, for each vocab, contains all benign prompts + that vocab. Assume the prompt size is 20, vocab size is 32000, then the total number of sample is 20 * 32000. This is the worse case we need to test. In the stage I scanning, only use a subset of prompts to interrogate fewer steps. In the stage II scanning, use all the prompts, with more steps**
-
+- [x] **preprocess dataset for all possible combination, given a set of benign prompts, and a vocab_list, append each token in vocab_list after all benign prompts, stored in two level, vocab_level, for each vocab, contains all benign prompts + that vocab. Assume the prompt size is 20, vocab size is 32000, then the total number of sample is 20 * 32000. This is the worse case we need to test. In the stage I scanning, only use a subset of prompts to interrogate fewer steps. In the stage II scanning, use all the prompts, with more steps**
+- [ ] factor BAIT scanner
 
 
 
