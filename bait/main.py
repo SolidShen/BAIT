@@ -12,7 +12,7 @@ backdoor scanning in large language models.
 
 Copyright (c) [2024] [PurduePAML]
 """
-
+import torch
 from transformers import HfArgumentParser
 from loguru import logger
 from bait.argument import BAITArguments, ModelArguments, DataArguments
@@ -25,6 +25,7 @@ import os
 import wandb
 from datetime import datetime
 from pprint import pprint
+from bait.bait import BAIT
 
 logging.get_logger("transformers").setLevel(logging.ERROR)
 
@@ -32,6 +33,20 @@ def main():
     seed_everything(SEED)
     parser = HfArgumentParser((BAITArguments, ModelArguments, DataArguments))
     bait_args, model_args, data_args = parser.parse_args_into_dataclasses()
+    
+    # Add this check after parsing arguments
+    if bait_args.warmup_batch_size > data_args.prompt_size:
+        bait_args.warmup_batch_size = data_args.prompt_size
+        logger.warning(f"warmup_batch_size was greater than prompt_size. Setting warmup_batch_size to {data_args.prompt_size}")
+    
+    if bait_args.interrogation_times_threshold > bait_args.extension_steps:
+        bait_args.interrogation_times_threshold = bait_args.extension_steps
+        logger.warning(f"interrogation_times_threshold was greater than extension_steps. Setting interrogation_times_threshold to {bait_args.extension_steps}")
+    
+    if bait_args.batch_size != data_args.batch_size:
+        logger.warning(f"batch_size was not equal to data_args.batch_size. Setting batch_size to {data_args.batch_size}")
+        bait_args.batch_size = data_args.batch_size
+
     model_args, data_args = parse_model_args(model_args, data_args)
 
     # Create a unique run name with timestamp
@@ -69,11 +84,11 @@ def main():
     dataset, dataloader = build_data_module(data_args, tokenizer, logger)
     logger.info("Data loaded successfully")
 
+    # initialize BAIT LLM backdoor scanner
+    bait = BAIT(model, tokenizer, dataloader, bait_args, logger, device = torch.device(f'cuda:{model_args.gpu}'))
+    is_backdoor, q_score, invert_target = bait()
 
-     
 
-    #TODO: init scanner
-    #TODO: scan
     #TODO: report
     
 
