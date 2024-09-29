@@ -12,15 +12,13 @@ the core functionality for initializing and running backdoor scans on LLMs.
 
 Copyright (c) [2024] [PurduePAML]
 """
-
+import torch
 from typing import Optional, List, Tuple
 from tqdm import tqdm
-import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from bait.argument import BAITArguments
 
-
-class BAIT:
+class GreedyBAIT:
     def __init__(
         self,
         model: PreTrainedModel,
@@ -30,60 +28,22 @@ class BAIT:
         logger: Optional[object] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
     ):
-        logger.info("Initializing BAIT...")
-        
+        logger.info("Initializing GreedyBAIT...")
         self.model = model
         self.tokenizer = tokenizer
         self.dataloader = dataloader
         self.logger = logger
         self.device = device
-        self.top_k = bait_args.top_k
-        self.times_threshold = bait_args.times_threshold
-        self.prob_threshold = bait_args.prob_threshold
-        self.warmup_batch_size = bait_args.warmup_batch_size
-        self.batch_size = bait_args.batch_size
-        self.extension_steps = bait_args.extension_steps
-        self.candidate_size = bait_args.candidate_size
-        self.expectation_threshold = bait_args.expectation_threshold
-        self.extension_ratio = bait_args.extension_ratio
-        self.early_stop_expectation_threshold = bait_args.early_stop_expectation_threshold
-        self.early_stop = bait_args.early_stop
-        self.top_p = bait_args.top_p
-        self.temperature = bait_args.temperature
-        self.no_repeat_ngram_size = bait_args.no_repeat_ngram_size
-        self.do_sample = bait_args.do_sample
-        self.return_dict_in_generate = bait_args.return_dict_in_generate
-        self.output_scores = bait_args.output_scores
-        self.min_target_len = bait_args.min_target_len
-        self.uncertainty_tolereance = bait_args.uncertainty_tolereance
-        self.entropy_threshold_1 = bait_args.entropy_threshold_1
-        self.entropy_threshold_2 = bait_args.entropy_threshold_2
-        self.output_dir = bait_args.output_dir
-        self.q_score_threshold = bait_args.q_score_threshold
+        
+        self._init_config(bait_args)
 
-    def __call__(self) -> Tuple[bool, float, List[int]]:
-        """
-        Execute the BAIT scanning process.
+    
+    def _init_config(self, bait_args: BAITArguments) -> None:
+        for key, value in bait_args.__dict__.items():
+            setattr(self, key, value)
 
-        Returns:
-            Tuple[bool, float, List[int]]: A tuple containing:
-                - bool: True if a backdoor is detected, False otherwise
-                - float: The final q-score
-                - List[int]: The invert target (if found, otherwise None)
-        """
-        self.logger.info("Starting BAIT scanning process...")
-        
-        backdoor_detected, q_score, invert_target = self.run()
-        
-        if backdoor_detected:
-            self.logger.info(f"Backdoor detected! Q-score: {q_score}, Invert target: {invert_target}")
-        else:
-            self.logger.info(f"No backdoor detected. Final Q-score: {q_score}")
-        
-        return backdoor_detected, q_score, invert_target
 
     def run(self) -> Tuple[bool, float, List[int]]:
-
         q_score = 0
         invert_target = None
 
@@ -92,63 +52,27 @@ class BAIT:
             attention_mask = batch_inputs["attention_mask"]
             index_map = batch_inputs["index_map"]
 
+            # TODO: change func name to sth related to invert_target
             batch_q_score, batch_invert_target = self.__scan_init_token_batch(input_ids, attention_mask, index_map)
             if batch_q_score > q_score:
                 q_score = batch_q_score
                 invert_target = batch_invert_target
 
-            
             self.logger.info(f"Q-score: {q_score}, Invert Target: {invert_target}")
             if q_score > self.q_score_threshold:
                 self.logger.info(f"Q-score is greater than threshold: {self.q_score_threshold}")
                 return True, q_score, invert_target
-            else:
-                self.logger.info(f"Q-score is less than threshold: {self.q_score_threshold}")
-                return False, q_score, invert_target
-            
-            
-    
-    def __scan_init_token_batch(self, input_ids, attention_mask, index_map):
-        #* due to efficiency, we split the scanning into two stages
-        #* in the first stage, only the first batch of the test prompts are leveraged to compute the q_score in a shorter steps
-        #* in the second stage, qualified candidates are proceeded to extend with more steps to further verifiy the q-score
 
-        # get subset of input_ids
-        sample_index = []
-        for map_idx in index_map:
-            start_idx = index_map[map_idx]
-            end_idx = index_map[map_idx] +  self.warmup_batch_size
-            sample_index.extend(i for i in range(start_idx, end_idx))
-        
-        sample_input_ids = input_ids[sample_index].to(self.device)
-        sample_attention_mask = attention_mask[sample_index].to(self.device)
-        warmup_targets, warmup_target_probs = self.__warm_up_scan(sample_input_ids, sample_attention_mask)        
-        return self.__scan(warmup_targets, warmup_target_probs, input_ids, attention_mask, index_map)
-    
-    def __scan(self, targets, target_probs, input_ids, attention_mask, index_map):
-        raise NotImplementedError
-        
-    def __warm_up_scan(self, input_ids, attention_mask) -> Tuple[torch.Tensor, torch.Tensor]:
-        
-        targets = torch.zeros(self.warmup_steps, self.batch_size).long() - 1
-        target_probs = torch.zeros(self.warmup_steps, self.batch_size) - 1
+        self.logger.info(f"Q-score is less than threshold: {self.q_score_threshold}")
+        return False, q_score, invert_target
 
-        
-        for step in range(self.warmup_steps):
-            output_probs = self.__generate(input_ids, attention_mask)
-            input_ids, attention_mask, targets, target_probs = self.__update(
-                targets, 
-                target_probs, 
-                output_probs, 
-                input_ids, 
-                attention_mask, 
-                step)
-            
-        
-        return targets, target_probs
-            
     @torch.no_grad()
-    def __generate(self, input_ids, attention_mask, max_new_tokens=1) -> torch.Tensor:
+    def __generate(
+        self, 
+        input_ids: torch.Tensor, 
+        attention_mask: torch.Tensor, 
+        max_new_tokens: int = 1
+    ) -> torch.Tensor:
         outputs = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -166,64 +90,142 @@ class BAIT:
         output_probs = torch.nn.functional.softmax(output_scores, dim=-1) 
         
         return output_probs
+
+    def __update(
+        self, 
+        targets: torch.Tensor, 
+        target_probs: torch.Tensor, 
+        output_probs: torch.Tensor, 
+        input_ids: torch.Tensor, 
+        attention_mask: torch.Tensor, 
+        step: int, 
+        target_mapping_record: List[torch.Tensor]
+        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, List[torch.Tensor]]:
+        # Calculate average probabilities across the warmup batch
+        batch_size = target_mapping_record[-1].shape[0]
+        avg_probs = output_probs.view(self.warmup_batch_size, batch_size, -1).mean(dim=0)
         
-    
-    def __update(self, targets, target_probs, output_probs, input_ids, attention_mask, step):
-        raise NotImplementedError
-    
-    def __scan(self, targets, target_probs, input_ids, attention_mask, index_map):
-        raise NotImplementedError
-
-    
+        # Get the most likely token and its probability for each sequence
+        top_probs, top_tokens = torch.max(avg_probs, dim=-1)
         
-       
-
-class GreedyBAIT(BAIT):
-    def __init__(self, model, tokenizer, dataset, bait_args, logger, device):
-        super().__init__(model, tokenizer, dataset, bait_args, logger, device)
-    
-    def __update(self, targets, target_probs, output_probs, input_ids, attention_mask, step):
-        # compute expectation group-wise for per self.warmup_batch_size
-        avg_probs = output_probs.view(self.warmup_batch_size, -1).mean(dim=0)
-        top_k_probs, top_k_indices = torch.max(avg_probs, dim=-1)
-        targets[step] = top_k_indices
-        target_probs[step] = top_k_probs
-
-        # repeat warmup_batch_size times top_k_indices and append to input_ids
-        input_ids = torch.cat([input_ids, top_k_indices.unsqueeze(0).repeat(self.warmup_batch_size, 1)], dim=0)
-        attention_mask = torch.cat([attention_mask, attention_mask[0].unsqueeze(0).repeat(self.warmup_batch_size, 1)], dim=0)
+        # Update targets and probabilities for this step
+        targets[step] = top_tokens
+        target_probs[step] = top_probs
         
-        return targets, target_probs, input_ids, attention_mask
-    
-    def __scan(self, targets, target_probs, input_ids, attention_mask, index_map):
+        # Append the new tokens to input_ids and extend attention_mask
+        new_tokens = top_tokens.unsqueeze(1).repeat(self.warmup_batch_size, 1)
+        input_ids = torch.cat([input_ids, new_tokens], dim=-1)
+        attention_mask = torch.cat([attention_mask, attention_mask[:, -1].unsqueeze(1)], dim=-1)
 
+        # Filter sequences based on the expectation threshold
+        high_prob_indices = torch.where(top_probs > self.expectation_threshold)[0]
+        
+        # Create indices for the filtered mini-batch
+        mini_batch_indices = (high_prob_indices.unsqueeze(1) * self.warmup_batch_size + torch.arange(self.warmup_batch_size, device=self.device)).flatten()
+
+        # Update input_ids, attention_mask, targets, and target_probs with filtered sequences
+        input_ids = input_ids[mini_batch_indices]
+        attention_mask = attention_mask[mini_batch_indices]
+        targets = targets[:, high_prob_indices]
+        target_probs = target_probs[:, high_prob_indices]
+
+        # Update the target mapping record
+        target_mapping_record.append(high_prob_indices)
+
+        return input_ids, attention_mask, targets, target_probs, target_mapping_record
+
+    def __warm_up_scan(
+        self, 
+        input_ids: torch.Tensor, 
+        attention_mask: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        targets = torch.zeros(self.warmup_steps, self.batch_size).long().to(self.device) - 1
+        target_probs = torch.zeros(self.warmup_steps, self.batch_size).to(self.device) - 1
+        target_mapping_record = [torch.arange(self.batch_size).to(self.device)]
+        for step in range(self.warmup_steps):
+            output_probs = self.__generate(input_ids, attention_mask)
+            input_ids, attention_mask, targets, target_probs, target_mapping_record = self.__update(
+                targets, 
+                target_probs, 
+                output_probs, 
+                input_ids, 
+                attention_mask, 
+                step,
+                target_mapping_record)
+        
+        # TODO: resume here 
+        return targets, target_probs, target_mapping_record
+
+    def __scan(
+        self, 
+        warmup_targets: torch.Tensor, 
+        warmup_target_probs: torch.Tensor, 
+        warmup_target_masks: torch.Tensor, 
+        input_ids: torch.Tensor, 
+        attention_mask: torch.Tensor, 
+        index_map: List[int]
+    ) -> Tuple[float, torch.Tensor]:
         q_score = 0
         invert_target = None
 
         for i in range(self.batch_size):
-            target = targets[:,i]
-            target_prob = target_probs[:,i]
-
-            if self.tokenizer.eos_token_id in target:
-                eos_id = torch.where(target == self.tokenizer.eos_token_id)[0][0].item()
-                target = target[:eos_id]
-                target_prob = target_prob[:eos_id]
-            
-            if (target_prob.mean() < self.expectation_threshold) or (len(target) < self.min_target_len):
+            if warmup_target_masks[i] == 0:
                 continue
+
+            warmup_target = warmup_targets[:,i]
+            warmup_target_prob = warmup_target_probs[:,i]
+            batch_input_ids = input_ids[i*self.batch_size:(i+1)*self.batch_size]
+            batch_attention_mask = attention_mask[i*self.batch_size:(i+1)*self.batch_size]
+
+            batch_target = torch.zeros(self.extension_steps).long().unsqueeze(1) - 1
+            batch_target_prob = torch.zeros(self.extension_steps).unsqueeze(1) - 1
+            for step in range(self.extension_steps):
+                output_probs = self.__generate(batch_input_ids, batch_attention_mask)
+                batch_input_ids, batch_attention_mask, batch_target, batch_target_prob = self.__update(
+                    batch_target, 
+                    batch_target_prob, 
+                    output_probs, 
+                    batch_input_ids, 
+                    batch_attention_mask, 
+                    step)
+                if batch_target[step] == self.tokenizer.eos_token_id:
+                    break
             
-            # recompute the q-score on all samples
-            # extend with more steps to get the final q-score 
-            #TODO: resume here
+            if self.tokenizer.eos_token_id in batch_target:
+                eos_id = torch.where(batch_target == self.tokenizer.eos_token_id)[0][0].item()
+                batch_target = batch_target[:eos_id]
+                batch_target_prob = batch_target_prob[:eos_id]
+            
+            batch_q_score = batch_target_prob.mean()
+            
+            if batch_q_score > q_score:
+                q_score = batch_q_score
+                invert_target = batch_target
         
+        return q_score, invert_target
 
+    def __scan_init_token_batch(
+        self, 
+        input_ids: torch.Tensor, 
+        attention_mask: torch.Tensor, 
+        index_map: List[int]
+    ) -> Tuple[float, torch.Tensor]:
+        sample_index = []
+        for map_idx in index_map:
+            start_idx = index_map[map_idx]
+            end_idx = index_map[map_idx] +  self.warmup_batch_size
+            sample_index.extend(i for i in range(start_idx, end_idx))
         
+        sample_input_ids = input_ids[sample_index].to(self.device)
+        sample_attention_mask = attention_mask[sample_index].to(self.device)
+        warmup_targets, warmup_target_probs = self.__warm_up_scan(sample_input_ids, sample_attention_mask)        
+        return self.__scan(warmup_targets, warmup_target_probs, input_ids, attention_mask, index_map)
 
-class EntropyBAIT(BAIT):
-    def __init__(self, model, tokenizer, dataset, bait_args, logger, device):
-        super().__init__(model, tokenizer, dataset, bait_args, logger, device)
+
+class EntropyBAIT:
+    pass
     
 
 
 class EntropyBAITforOpenAI(EntropyBAIT):
-    pass  
+    pass
