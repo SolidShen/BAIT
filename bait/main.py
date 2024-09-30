@@ -22,7 +22,6 @@ from bait.data.bait_extend import build_data_module
 from bait.constants import SEED
 from transformers.utils import logging
 import os
-import wandb
 from datetime import datetime
 from pprint import pprint
 from bait.bait import GreedyBAIT, EntropyBAIT
@@ -52,14 +51,6 @@ def main():
     # log directory
     log_dir = os.path.join(bait_args.output_dir, run_name)
     os.makedirs(log_dir, exist_ok=True)
-
-    if bait_args.report_to == "wandb":
-        wandb.init(
-            project="BAIT",
-            name=run_name,
-            config=bait_args,
-            dir=log_dir
-        )
     
     
     logger.info("BAIT Arguments:")
@@ -85,7 +76,7 @@ def main():
     scanner = GreedyBAIT(model, tokenizer, dataloader, bait_args, logger, device = torch.device(f'cuda:{model_args.gpu}'))
     is_backdoor, q_score, invert_target = scanner.run()
 
-
+    #TODO: save log
     #TODO: report
     
 
