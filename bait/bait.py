@@ -30,6 +30,17 @@ class GreedyBAIT:
         logger: Optional[object] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
     ):
+        """
+        Initialize the GreedyBAIT object.
+
+        Args:
+            model (PreTrainedModel): The pre-trained language model.
+            tokenizer (PreTrainedTokenizer): The tokenizer for the model.
+            dataloader (DataLoader): DataLoader for input data.
+            bait_args (BAITArguments): Configuration arguments for BAIT.
+            logger (Optional[object]): Logger object for logging information.
+            device (str): Device to run the model on (cuda or cpu).
+        """
         logger.info("Initializing GreedyBAIT...")
         self.model = model
         self.tokenizer = tokenizer
@@ -39,12 +50,18 @@ class GreedyBAIT:
         self._init_config(bait_args)
 
     
-    def _init_config(self, bait_args: BAITArguments) -> None:
-        for key, value in bait_args.__dict__.items():
-            setattr(self, key, value)
 
-
+    @torch.no_grad()
     def run(self) -> Tuple[bool, float, List[int]]:
+        """
+        Run the GreedyBAIT algorithm on the input data.
+
+        Returns:
+            Tuple[bool, float, List[int]]: A tuple containing:
+                - Boolean indicating if a backdoor was detected
+                - The highest Q-score found
+                - The invert target (token IDs) for the potential backdoor
+        """
         q_score = 0
         invert_target = None
 
@@ -65,13 +82,23 @@ class GreedyBAIT:
         self.logger.info(f"Q-score is less than threshold: {self.q_score_threshold}")
         return False, q_score, invert_target
 
-    @torch.no_grad()
     def __generate(
         self, 
         input_ids: torch.Tensor, 
         attention_mask: torch.Tensor, 
         max_new_tokens: int = 1
     ) -> torch.Tensor:
+        """
+        Generate output probabilities for the next token using the model.
+
+        Args:
+            input_ids (torch.Tensor): Input token IDs.
+            attention_mask (torch.Tensor): Attention mask for the input.
+            max_new_tokens (int): Maximum number of new tokens to generate.
+
+        Returns:
+            torch.Tensor: Output probabilities for the next token.
+        """
         outputs = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -96,6 +123,16 @@ class GreedyBAIT:
         input_ids: torch.Tensor, 
         attention_mask: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Perform warm-up inversion to using a mini-batch and short generation steps
+
+        Args:
+            input_ids (torch.Tensor): Input token IDs.
+            attention_mask (torch.Tensor): Attention mask for the input.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: Processed targets and target probabilities.
+        """
         targets = torch.zeros(self.warmup_steps, self.batch_size).long().to(self.device) - 1
         target_probs = torch.zeros(self.warmup_steps, self.batch_size).to(self.device) - 1
         target_mapping_record = [torch.arange(self.batch_size).to(self.device)]
@@ -105,7 +142,7 @@ class GreedyBAIT:
         
         for step in range(self.warmup_steps):
             output_probs = self.__generate(input_ids, attention_mask)
-            input_ids, attention_mask, targets, target_probs, target_mapping_record = self.__update(
+            input_ids, attention_mask, targets, target_probs, target_mapping_record = self._update(
                 targets, 
                 target_probs, 
                 output_probs, 
@@ -134,7 +171,6 @@ class GreedyBAIT:
         processed_target_probs[:,original_indices] = target_probs
         return processed_targets, processed_target_probs
 
-    @torch.no_grad()
     def full_inversion(
         self, 
         warmup_targets: torch.Tensor, 
@@ -143,7 +179,19 @@ class GreedyBAIT:
         attention_mask: torch.Tensor, 
         index_map: List[int]
     ) -> Tuple[float, torch.Tensor]:
+        """
+        Perform full inversion to find the highest Q-score and invert target.
 
+        Args:
+            warmup_targets (torch.Tensor): Targets from warm-up inversion.
+            warmup_target_probs (torch.Tensor): Target probabilities from warm-up inversion.
+            input_ids (torch.Tensor): Input token IDs.
+            attention_mask (torch.Tensor): Attention mask for the input.
+            index_map (List[int]): Mapping of indices for batches.
+
+        Returns:
+            Tuple[float, torch.Tensor]: Highest Q-score and corresponding invert target.
+        """
         input_ids = input_ids.to(self.device)
         attention_mask = attention_mask.to(self.device)
         
@@ -156,7 +204,6 @@ class GreedyBAIT:
             if -1 in warmup_targets[:,i]:
                 continue
 
-             
             warmup_target = warmup_targets[:,i]
             warmup_target_prob = warmup_target_probs[:,i]
             batch_input_ids = input_ids[i*full_batch_size:(i+1)*full_batch_size]
@@ -164,13 +211,9 @@ class GreedyBAIT:
 
             initial_token = batch_input_ids[0, -1].unsqueeze(0)
 
-            
-
             batch_target = []
             batch_target_prob = []
 
-            # TODO: first verifiy the correctness of warmup_targets and warmup_target_probs using whole batch
-            # TODO: extend it with longer steps
             for step in range(self.full_steps):
                 output_probs = self.__generate(batch_input_ids, batch_attention_mask)
                 avg_probs = output_probs.mean(dim=0)
@@ -218,6 +261,17 @@ class GreedyBAIT:
         attention_mask: torch.Tensor, 
         index_map: List[int]
     ) -> Tuple[float, torch.Tensor]:
+        """
+        enumerate initial tokens and invert the entire attack target.
+
+        Args:
+            input_ids (torch.Tensor): Input token IDs.
+            attention_mask (torch.Tensor): Attention mask for the input.
+            index_map (List[int]): Mapping of indices for batches.
+
+        Returns:
+            Tuple[float, torch.Tensor]: Q-score and invert target for potential backdoor.
+        """
         sample_index = []
         for map_idx in index_map:
             start_idx = index_map[map_idx]
@@ -230,7 +284,21 @@ class GreedyBAIT:
         warmup_targets, warmup_target_probs = self.warm_up_inversion(sample_input_ids, sample_attention_mask)        
         return self.full_inversion(warmup_targets, warmup_target_probs, input_ids, attention_mask, index_map)
 
-    def __update(
+
+
+    def _init_config(self, bait_args: BAITArguments) -> None:
+        """
+        Initialize configuration from BAITArguments.
+
+        Args:
+            bait_args (BAITArguments): Configuration arguments for BAIT.
+        """
+        for key, value in bait_args.__dict__.items():
+            setattr(self, key, value)
+        
+        
+            
+    def _update(
         self, 
         targets: torch.Tensor, 
         target_probs: torch.Tensor, 
@@ -240,13 +308,29 @@ class GreedyBAIT:
         step: int, 
         target_mapping_record: List[torch.Tensor]
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, List[torch.Tensor]]:
+        """
+        Update targets, probabilities, and input sequences based on output probabilities.
+
+        Args:
+            targets (torch.Tensor): Current target tokens.
+            target_probs (torch.Tensor): Current target probabilities.
+            output_probs (torch.Tensor): Output probabilities from the model.
+            input_ids (torch.Tensor): Input token IDs.
+            attention_mask (torch.Tensor): Attention mask for the input.
+            step (int): Current step in the inversion process.
+            target_mapping_record (List[torch.Tensor]): Record of target mappings.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, List[torch.Tensor]]:
+                Updated input_ids, attention_mask, targets, target_probs, and target_mapping_record.
+        """
         # Calculate average probabilities across the warmup batch
         batch_size = target_mapping_record[-1].shape[0]
         avg_probs = output_probs.view(batch_size, self.warmup_batch_size, -1).mean(dim=1)
 
         
         # compute self entropy 
-        self_entropy = self.__compute_self_entropy(avg_probs)
+        self_entropy = self._compute_self_entropy(avg_probs)
         
         # Get the most likely token and its probability for each sequence
         top_probs, top_tokens = torch.max(avg_probs, dim=-1)
@@ -285,11 +369,21 @@ class GreedyBAIT:
         return input_ids, attention_mask, targets, target_probs, target_mapping_record
 
 
-    def __compute_self_entropy(
+    def _compute_self_entropy(
         self,
         probs_distribution: torch.Tensor,
         eps: float = 1e-10
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> torch.Tensor:
+        """
+        Compute the self-entropy of a probability distribution.
+
+        Args:
+            probs_distribution (torch.Tensor): Probability distribution.
+            eps (float): Small value to avoid log(0).
+
+        Returns:
+            torch.Tensor: Computed self-entropy.
+        """
         # numeraical stable 
         probs_distribution = probs_distribution + eps
         entropy = - (probs_distribution * torch.log(probs_distribution)).sum(dim=-1)

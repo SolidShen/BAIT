@@ -15,4 +15,3 @@ python -m bait.main \
     --gpu $gpu \
     --output_dir "result" 
     # --report_to "wandb"
-    
