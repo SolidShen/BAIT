@@ -106,6 +106,10 @@ model_zoo/
 ##############
 data/
 
+# Temp folder 
+##############
+tmp/
+
 # Project-specific #
 ####################
 # Add any project-specific files or directories you want to ignore
