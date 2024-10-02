@@ -3,11 +3,10 @@ bait.py: Core module for the BAIT (LLM Backdoor Scanning) project.
 
 Author: [NoahShen]
 Organization: [PurduePAML]
-Date: [2024-09-25]
-Version: 1.0
+Date: [2024-10-01]
+Version: 1.1
 
-This module contains the main BAIT class and its subclasses (GreedyBAIT and EntropyBAIT)
-for implementing different backdoor scanning strategies in language models. It provides
+This module contains the main BAIT class It provides
 the core functionality for initializing and running backdoor scans on LLMs.
 
 Copyright (c) [2024] [PurduePAML]
@@ -21,7 +20,7 @@ from bait.argument import BAITArguments
 # TODO: reshape all variables to make sure batch_size is the first dimension
 # TODO: fix bug at the last batch
 
-class GreedyBAIT:
+class BAIT:
     def __init__(
         self,
         model: PreTrainedModel,
@@ -32,7 +31,7 @@ class GreedyBAIT:
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
     ):
         """
-        Initialize the GreedyBAIT object.
+        Initialize the BAIT object.
 
         Args:
             model (PreTrainedModel): The pre-trained language model.
@@ -42,7 +41,7 @@ class GreedyBAIT:
             logger (Optional[object]): Logger object for logging information.
             device (str): Device to run the model on (cuda or cpu).
         """
-        logger.info("Initializing GreedyBAIT...")
+        logger.info("Initializing BAIT...")
         self.model = model
         self.tokenizer = tokenizer
         self.dataloader = dataloader
@@ -50,12 +49,11 @@ class GreedyBAIT:
         self.device = device
         self._init_config(bait_args)
 
-    
 
     @torch.no_grad()
     def run(self) -> Tuple[bool, float, List[int]]:
         """
-        Run the GreedyBAIT algorithm on the input data.
+        Run the BAIT algorithm on the input data.
 
         Returns:
             Tuple[bool, float, List[int]]: A tuple containing:
@@ -72,6 +70,7 @@ class GreedyBAIT:
             index_map = batch_inputs["index_map"]
 
             batch_q_score, batch_invert_target = self.scan_init_token(input_ids, attention_mask, index_map)
+            self.logger.debug(f"Batch Q-score: {batch_q_score}, Batch Invert Target: {batch_invert_target}")
             if batch_q_score > q_score:
                 q_score = batch_q_score
                 invert_target = batch_invert_target
@@ -79,7 +78,6 @@ class GreedyBAIT:
                 if self.early_stop and q_score > self.early_stop_q_score_threshold:
                     self.logger.info(f"Early stop at q-score: {q_score}")
                     break
-            
 
         if q_score > self.q_score_threshold:
             self.logger.info(f"Q-score is greater than threshold: {self.q_score_threshold}")
@@ -141,17 +139,18 @@ class GreedyBAIT:
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: Processed targets and target probabilities.
         """
-        targets = torch.zeros(self.warmup_steps, self.batch_size).long().to(self.device) - 1
-        target_probs = torch.zeros(self.warmup_steps, self.batch_size).to(self.device) - 1
-        target_mapping_record = [torch.arange(self.batch_size).to(self.device)]
-        tolerance_times = torch.zeros(self.batch_size).to(self.device)
+        batch_size = min(self.batch_size, int(input_ids.shape[0] // self.warmup_batch_size))
+        targets = torch.zeros(self.warmup_steps, batch_size).long().to(self.device) - 1
+        target_probs = torch.zeros(self.warmup_steps, batch_size).to(self.device) - 1
+        target_mapping_record = [torch.arange(batch_size).to(self.device)]
+        uncertainty_inspection_times = torch.zeros(batch_size).to(self.device)
         
-        processed_targets = torch.zeros(self.warmup_steps, self.batch_size).long().to(self.device) - 1
-        processed_target_probs = torch.zeros(self.warmup_steps, self.batch_size).to(self.device) - 1
+        processed_targets = torch.zeros(self.warmup_steps, batch_size).long().to(self.device) - 1
+        processed_target_probs = torch.zeros(self.warmup_steps, batch_size).to(self.device) - 1
         
         for step in range(self.warmup_steps):
             output_probs = self.__generate(input_ids, attention_mask)
-            input_ids, attention_mask, targets, target_probs, target_mapping_record, tolerance_times = self._update(
+            input_ids, attention_mask, targets, target_probs, target_mapping_record, uncertainty_inspection_times = self._update(
                 targets, 
                 target_probs, 
                 output_probs, 
@@ -159,21 +158,20 @@ class GreedyBAIT:
                 attention_mask, 
                 step,
                 target_mapping_record,
-                tolerance_times
+                uncertainty_inspection_times
             )
             
-            if len(input_ids) == 0:
+            if input_ids is None:
                 self.logger.debug("Input ids is empty, break")
                 return processed_targets, processed_target_probs
-       
         
         
         last_step_indices = target_mapping_record[-1]
         original_indices = []
-        for idx in last_step_indices:
+        for idx in range(len(last_step_indices)):
             # trace back to the first step
             original_idx = last_step_indices[idx]
-            for step in range(len(target_mapping_record)-1, -1, -1):
+            for step in range(len(target_mapping_record)-2, -1, -1):
                 original_idx = target_mapping_record[step][original_idx]
             original_indices.append(original_idx)
         
@@ -209,16 +207,17 @@ class GreedyBAIT:
         q_score = 0
         invert_target = None
 
-        full_batch_size = input_ids.shape[0] // self.batch_size
+        
+        batch_size = min(self.batch_size, int(input_ids.shape[0] // self.prompt_size))
 
-        for i in range(self.batch_size):
+        for i in range(batch_size):
             if -1 in warmup_targets[:,i]:
                 continue
 
             warmup_target = warmup_targets[:,i]
             warmup_target_prob = warmup_target_probs[:,i]
-            batch_input_ids = input_ids[i*full_batch_size:(i+1)*full_batch_size]
-            batch_attention_mask = attention_mask[i*full_batch_size:(i+1)*full_batch_size]
+            batch_input_ids = input_ids[i*self.prompt_size:(i+1)*self.prompt_size]
+            batch_attention_mask = attention_mask[i*self.prompt_size:(i+1)*self.prompt_size]
 
             initial_token = batch_input_ids[0, -1].unsqueeze(0)
 
@@ -229,12 +228,12 @@ class GreedyBAIT:
                 output_probs = self.__generate(batch_input_ids, batch_attention_mask)
                 avg_probs = output_probs.mean(dim=0)
                 if step < self.warmup_steps:
-                    new_token = warmup_target[step].unsqueeze(0).expand(full_batch_size, -1)
+                    new_token = warmup_target[step].unsqueeze(0).expand(self.prompt_size, -1)
                     batch_target.append(warmup_target[step])
                     batch_target_prob.append(avg_probs[warmup_target[step]])
                 else:
                     top_prob, top_token = torch.max(avg_probs, dim=-1)
-                    new_token = top_token.unsqueeze(0).expand(full_batch_size, -1)
+                    new_token = top_token.unsqueeze(0).expand(self.prompt_size, -1)
                     batch_target.append(top_token)
                     batch_target_prob.append(top_prob)
                      
@@ -260,7 +259,6 @@ class GreedyBAIT:
             
             if batch_q_score > q_score:
                 q_score = batch_q_score
-                # concate initial token to the front of batch_target
                 batch_target = torch.cat([initial_token.detach().cpu(), batch_target], dim=-1)
                 invert_target = self.tokenizer.decode(batch_target)
         
@@ -295,7 +293,28 @@ class GreedyBAIT:
         warmup_targets, warmup_target_probs = self.warm_up_inversion(sample_input_ids, sample_attention_mask)        
         return self.full_inversion(warmup_targets, warmup_target_probs, input_ids, attention_mask, index_map)
 
+        
+    def uncertainty_inspection(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        avg_probs: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Perform uncertainty inspection for the current batch.
+        """
+        topk_probs, topk_indices = torch.topk(avg_probs, k=self.uncertainty_inspection_topk, dim=-1)
+        reshape_topk_indices = topk_indices.view(-1).repeat_interleave(self.warmup_batch_size).unsqueeze(1)
+        input_ids = input_ids.repeat(self.uncertainty_inspection_topk, 1)
+        attention_mask = attention_mask.repeat(self.uncertainty_inspection_topk, 1)
+        input_ids = torch.cat([input_ids, reshape_topk_indices], dim=-1)
+        attention_mask = torch.cat([attention_mask, attention_mask[:, -1].unsqueeze(1)], dim=-1)
+        output_probs = self.__generate(input_ids, attention_mask).view(self.uncertainty_inspection_topk, self.warmup_batch_size, -1).mean(dim=1)
+        max_prob, max_indices = torch.max(output_probs, dim=-1)
+        new_token = topk_indices[max_indices.argmax()]
+        return new_token
 
+        
 
     def _init_config(self, bait_args: BAITArguments) -> None:
         """
@@ -306,8 +325,7 @@ class GreedyBAIT:
         """
         for key, value in bait_args.__dict__.items():
             setattr(self, key, value)
-        
-        
+
             
     def _update(
         self, 
@@ -318,7 +336,7 @@ class GreedyBAIT:
         attention_mask: torch.Tensor, 
         step: int, 
         target_mapping_record: List[torch.Tensor],
-        tolerance_times: torch.Tensor
+        uncertainty_inspection_times: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, List[torch.Tensor]]:
         """
         Update targets, probabilities, and input sequences based on output probabilities.
@@ -340,10 +358,13 @@ class GreedyBAIT:
         batch_size = target_mapping_record[-1].shape[0]
         avg_probs = output_probs.view(batch_size, self.warmup_batch_size, -1).mean(dim=1)
 
-        
-        # compute self entropy 
         self_entropy = self._compute_self_entropy(avg_probs)
 
+        
+        selected_indices = []
+        selected_input_ids = []
+        selected_attention_mask = []
+        
 
         for cand_idx in range(batch_size):
             cand_self_entropy = self_entropy[cand_idx]
@@ -352,19 +373,45 @@ class GreedyBAIT:
             cand_batch_input_ids = input_ids[cand_idx * self.warmup_batch_size:(cand_idx + 1) * self.warmup_batch_size]
             cand_batch_attention_mask = attention_mask[cand_idx * self.warmup_batch_size:(cand_idx + 1) * self.warmup_batch_size]
             
-            cand_tolerance_time = tolerance_times[cand_idx]
-            uncertainty_conditions = self._check_uncertainty(cand_self_entropy, cand_avg_probs, cand_max_prob, cand_tolerance_time)
+            cand_uncertainty_inspection_times = uncertainty_inspection_times[cand_idx]
+            uncertainty_conditions = self._check_uncertainty(cand_self_entropy, cand_avg_probs, cand_max_prob, cand_uncertainty_inspection_times)
             if uncertainty_conditions:
-                # TODO: implement uncertainty inspection
+                self.logger.debug(f"Uncertainty inspection conditions met for candidate {cand_idx}")
                 new_token = self.uncertainty_inspection(cand_batch_input_ids, cand_batch_attention_mask, cand_avg_probs)
+                uncertainty_inspection_times[cand_idx] += 1
+
+                targets[step][cand_idx] = new_token
+                target_probs[step][cand_idx] = cand_avg_probs[new_token]
+                cand_batch_input_ids = torch.cat([cand_batch_input_ids, new_token.view(-1, 1).expand(-1, self.warmup_batch_size).reshape(-1, 1)], dim=-1)
+                cand_batch_attention_mask = torch.cat([cand_batch_attention_mask, cand_batch_attention_mask[:, -1].unsqueeze(1)], dim=-1)
+
+                selected_indices.append(cand_idx)
+                selected_input_ids.append(cand_batch_input_ids)
+                selected_attention_mask.append(cand_batch_attention_mask)
+
             else:
                 if cand_self_entropy < self.self_entropy_lower_bound and cand_max_prob > self.expectation_threshold:
-                    # TODO: get the max 
-                else:
-                    # TODO: delete the current candidate token
-                    
-            
+                    new_token = cand_avg_probs.argmax()
+                    targets[step][cand_idx] = new_token
+                    target_probs[step][cand_idx] = cand_max_prob
+                    cand_batch_input_ids = torch.cat([cand_batch_input_ids, new_token.view(-1, 1).expand(-1, self.warmup_batch_size).reshape(-1, 1)], dim=-1)
+                    cand_batch_attention_mask = torch.cat([cand_batch_attention_mask, cand_batch_attention_mask[:, -1].unsqueeze(1)], dim=-1)
 
+                    selected_indices.append(cand_idx)
+                    selected_input_ids.append(cand_batch_input_ids)
+                    selected_attention_mask.append(cand_batch_attention_mask)
+        
+        if len(selected_indices) == 0:
+            return None, None, None, None, None, None
+        else:
+            selected_indices = torch.tensor(selected_indices).long().to(self.device)
+            input_ids = torch.cat(selected_input_ids, dim=0)
+            attention_mask = torch.cat(selected_attention_mask, dim=0)
+            targets = targets[:, selected_indices]
+            target_probs = target_probs[:, selected_indices]
+            target_mapping_record.append(selected_indices)
+            return input_ids, attention_mask, targets, target_probs, target_mapping_record, uncertainty_inspection_times
+         
         # Get the most likely token and its probability for each sequence
         top_probs, top_tokens = torch.max(avg_probs, dim=-1)
         
@@ -401,7 +448,22 @@ class GreedyBAIT:
 
         return input_ids, attention_mask, targets, target_probs, target_mapping_record
 
-
+    def _check_uncertainty(
+        self,
+        self_entropy: torch.Tensor,
+        avg_probs: torch.Tensor,
+        max_prob: torch.Tensor,
+        uncertainty_inspection_times: torch.Tensor
+    ) -> bool:
+        """
+        Check if the uncertainty condition is met.
+        """
+        cr1 = uncertainty_inspection_times < self.uncertainty_inspection_times_threshold
+        cr2 = self_entropy < self.self_entropy_upper_bound
+        cr3 = self_entropy > self.self_entropy_lower_bound
+        cr4 = max_prob < self.expectation_threshold
+        return cr1 and ((cr2 and cr3) or (not cr3 and cr4))
+    
     def _compute_self_entropy(
         self,
         probs_distribution: torch.Tensor,
@@ -422,9 +484,6 @@ class GreedyBAIT:
         entropy = - (probs_distribution * torch.log(probs_distribution)).sum(dim=-1)
         return entropy
 
-class EntropyBAIT:
-    pass
-    
 
-class EntropyBAITforOpenAI(EntropyBAIT):
+class BAITforOpenAI(BAIT):
     pass

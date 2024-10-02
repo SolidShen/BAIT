@@ -270,6 +270,9 @@ def parse_model_args(model_args, data_args):
     with open(model_config_path, "r") as f:
         model_config = json.load(f)
     model_args.attack = model_config["attack"]
+    model_args.is_backdoor = model_config["label"] == "poison"
+    model_args.trigger = model_config["trigger"]
+    model_args.target = model_config["target"]
     data_args.dataset = model_config["dataset"]
 
     return model_args, data_args

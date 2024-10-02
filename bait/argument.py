@@ -19,9 +19,8 @@ from dataclasses import dataclass, field
 
 @dataclass
 class BAITArguments:
-    top_k: int = field(default=5, metadata={"help": "Number of top candidates to consider"})
-    tolerance_times_threshold: int = field(default=1, metadata={"help": "Threshold for number of uncertainty tolerance times "})
-    prob_threshold: float = field(default=0.2, metadata={"help": "Probability threshold for token selection"})
+    uncertainty_inspection_topk: int = field(default=5, metadata={"help": "Number of top candidates to consider"})
+    uncertainty_inspection_times_threshold: int = field(default=1, metadata={"help": "Threshold for number of uncertainty tolerance times "})
     warmup_batch_size: int = field(default=4, metadata={"help": "Batch size for prompt processing"})
     warmup_steps: int = field(default=5, metadata={"help": "Number of warmup steps"})
     full_steps: int = field(default=20, metadata={"help": "Number of full steps"})
@@ -39,7 +38,9 @@ class BAITArguments:
     self_entropy_upper_bound: float = field(default=2.5, metadata={"help": "Upper bound of self entropy"})
     q_score_threshold: float = field(default=0.9, metadata={"help": "Q-score threshold"})
     output_dir: str = field(default="", metadata={"help": "Output directory"})
+    project_name: str = field(default="", metadata={"help": "Project name"})
     report_to: str = field(default="", metadata={"help": "Report to", "choices": ["wandb", ""]})
+
 
 
 @dataclass
@@ -49,6 +50,9 @@ class ModelArguments:
     cache_dir: str = field(default="", metadata={"help": "Cache directory"})
     attack: str = field(default="", metadata={"help": "Attack Type", "choices": ["cba", "trojai", "badagent", "instruction-backdoor", "trojan-plugin"]})
     gpu: int = field(default=0, metadata={"help": "GPU ID"})
+    is_backdoor: bool = field(default=False, metadata={"help": "Whether the model is backdoor"})
+    trigger: str = field(default="", metadata={"help": "Trigger"})
+    target: str = field(default="", metadata={"help": "Target"})
 
 
 @dataclass
