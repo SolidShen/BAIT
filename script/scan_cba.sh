@@ -12,6 +12,6 @@ for model_id in model_zoo/models/*; do
         --prompt_size 20 \
         --gpu $gpu \
         --output_dir "result" \
-        --project_name "bait_cba" 
+        --project_name "bait_cba_v2" 
 done
 
