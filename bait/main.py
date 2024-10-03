@@ -100,7 +100,7 @@ def main():
     
     result = {
         "is_backdoor": is_backdoor,
-        "q_score": q_score.item(),
+        "q_score": q_score,
         "invert_target": invert_target,
         "time_taken": end_time - start_time
     }

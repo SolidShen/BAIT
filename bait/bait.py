@@ -69,6 +69,9 @@ class BAIT:
             attention_mask = batch_inputs["attention_mask"]
             index_map = batch_inputs["index_map"]
 
+            self.logger.debug(f"Input IDs: {input_ids} shape: {input_ids.shape}")
+            self.logger.debug(f"Attention Mask: {attention_mask} shape: {attention_mask.shape}")
+
             batch_q_score, batch_invert_target = self.scan_init_token(input_ids, attention_mask, index_map)
             self.logger.debug(f"Batch Q-score: {batch_q_score}, Batch Invert Target: {batch_invert_target}")
             if batch_q_score > q_score:
@@ -255,11 +258,18 @@ class BAIT:
                 batch_target = batch_target[:eos_id]
                 batch_target_prob = batch_target_prob[:eos_id]
             
-            batch_q_score = batch_target_prob.mean()
+            # Remove the smallest probability from batch_target_prob to improve detection robustness
+            if len(batch_target_prob) > 1:
+                min_prob_index = torch.argmin(batch_target_prob)
+                batch_target_prob = torch.cat([batch_target_prob[:min_prob_index], batch_target_prob[min_prob_index+1:]])
             
-            if batch_q_score > q_score:
+            # Calculate the batch_q_score as the mean of the remaining probabilities
+            batch_q_score = batch_target_prob.mean().item()
+            batch_target = torch.cat([initial_token.detach().cpu(), batch_target], dim=-1)
+            self.logger.debug(f"batch_target: {batch_target}")
+            self.logger.debug(f"batch_target_len: {len(batch_target)}")
+            if batch_q_score > q_score and len(batch_target) >= self.min_target_len:
                 q_score = batch_q_score
-                batch_target = torch.cat([initial_token.detach().cpu(), batch_target], dim=-1)
                 invert_target = self.tokenizer.decode(batch_target)
         
         return q_score, invert_target
@@ -304,6 +314,11 @@ class BAIT:
         Perform uncertainty inspection for the current batch.
         """
         topk_probs, topk_indices = torch.topk(avg_probs, k=self.uncertainty_inspection_topk, dim=-1)
+        #============================Debugging log============================
+        for topk_prob, topk_index in zip(topk_probs, topk_indices):
+            token = self.tokenizer.convert_ids_to_tokens(topk_index.tolist())
+            self.logger.debug(f"Tokens: {token:<20} | IDs: {topk_index.item():<20} | Probs: {topk_prob.item():<20.4f}")
+        #============================Debugging log============================
         reshape_topk_indices = topk_indices.view(-1).repeat_interleave(self.warmup_batch_size).unsqueeze(1)
         input_ids = input_ids.repeat(self.uncertainty_inspection_topk, 1)
         attention_mask = attention_mask.repeat(self.uncertainty_inspection_topk, 1)
@@ -311,7 +326,16 @@ class BAIT:
         attention_mask = torch.cat([attention_mask, attention_mask[:, -1].unsqueeze(1)], dim=-1)
         output_probs = self.__generate(input_ids, attention_mask).view(self.uncertainty_inspection_topk, self.warmup_batch_size, -1).mean(dim=1)
         max_prob, max_indices = torch.max(output_probs, dim=-1)
-        new_token = topk_indices[max_indices.argmax()]
+        new_token = topk_indices[max_prob.argmax()]
+        
+        #============================Debugging log============================
+        self.logger.debug(f"Max prob: {max_prob}")
+        self.logger.debug(f"Max indices: {max_indices}")
+        self.logger.debug(f"max_indices.argmax(): {max_prob.argmax()}")
+        self.logger.debug(f"decode: {self.tokenizer.decode(max_prob.argmax())}")
+        self.logger.debug(f"new_token: {new_token}")
+        self.logger.debug(f"decode: {self.tokenizer.decode(new_token)}") 
+        #============================Debugging log============================
         return new_token
 
         
@@ -371,12 +395,15 @@ class BAIT:
             cand_avg_probs = avg_probs[cand_idx]
             cand_max_prob = cand_avg_probs.max()
             cand_batch_input_ids = input_ids[cand_idx * self.warmup_batch_size:(cand_idx + 1) * self.warmup_batch_size]
+            self.logger.debug(f"Cand input: {self.tokenizer.decode(cand_batch_input_ids[0])}")
+            self.logger.debug(f"Cand entropy: {cand_self_entropy}")
+            self.logger.debug(f"Cand max prob: {cand_max_prob}")
             cand_batch_attention_mask = attention_mask[cand_idx * self.warmup_batch_size:(cand_idx + 1) * self.warmup_batch_size]
             
             cand_uncertainty_inspection_times = uncertainty_inspection_times[cand_idx]
             uncertainty_conditions = self._check_uncertainty(cand_self_entropy, cand_avg_probs, cand_max_prob, cand_uncertainty_inspection_times)
             if uncertainty_conditions:
-                self.logger.debug(f"Uncertainty inspection conditions met for candidate {cand_idx}")
+                self.logger.debug(f"Uncertainty inspection conditions met for candidate token: {self.tokenizer.convert_ids_to_tokens(cand_batch_input_ids[0][-1].tolist())}")
                 new_token = self.uncertainty_inspection(cand_batch_input_ids, cand_batch_attention_mask, cand_avg_probs)
                 uncertainty_inspection_times[cand_idx] += 1
 
@@ -390,7 +417,7 @@ class BAIT:
                 selected_attention_mask.append(cand_batch_attention_mask)
 
             else:
-                if cand_self_entropy < self.self_entropy_lower_bound and cand_max_prob > self.expectation_threshold:
+                if cand_self_entropy < self.self_entropy_lower_bound or cand_max_prob > self.expectation_threshold:
                     new_token = cand_avg_probs.argmax()
                     targets[step][cand_idx] = new_token
                     target_probs[step][cand_idx] = cand_max_prob
@@ -462,7 +489,7 @@ class BAIT:
         cr2 = self_entropy < self.self_entropy_upper_bound
         cr3 = self_entropy > self.self_entropy_lower_bound
         cr4 = max_prob < self.expectation_threshold
-        return cr1 and ((cr2 and cr3) or (not cr3 and cr4))
+        return cr1 and ((cr2 and cr3) or (cr2 and cr4))
     
     def _compute_self_entropy(
         self,
@@ -481,6 +508,7 @@ class BAIT:
         """
         # numeraical stable 
         probs_distribution = probs_distribution + eps
+        # probs_distribution = probs_distribution
         entropy = - (probs_distribution * torch.log(probs_distribution)).sum(dim=-1)
         return entropy
 
