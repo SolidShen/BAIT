@@ -171,12 +171,14 @@ def load_default_model(base_model: str, cache_dir: str, gpu: int) -> Tuple[trans
     Returns:
         tuple: A tuple containing the loaded model and tokenizer.
     """
+
     tokenizer = AutoTokenizer.from_pretrained(base_model, cache_dir=cache_dir)
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         cache_dir=cache_dir,
         torch_dtype=torch.float16,
-        device_map={"": gpu}
+        device_map="auto"
+        # device_map={"": gpu}
     )
     return model, tokenizer
 

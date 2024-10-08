@@ -17,8 +17,6 @@ from tqdm import tqdm
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from bait.argument import BAITArguments
 
-# TODO: reshape all variables to make sure batch_size is the first dimension
-# TODO: fix bug at the last batch
 
 class BAIT:
     def __init__(
@@ -506,12 +504,15 @@ class BAIT:
         Returns:
             torch.Tensor: Computed self-entropy.
         """
-        # numeraical stable 
-        probs_distribution = probs_distribution + eps
-        # probs_distribution = probs_distribution
+        # Add eps to avoid log(0) and handle NaN values
+        probs_distribution = torch.nan_to_num(probs_distribution, nan=0.0) + eps
+        print(probs_distribution)
+        
+        # Normalize the distribution
+        probs_distribution = probs_distribution / probs_distribution.sum(dim=-1, keepdim=True)
+        
+        # Compute entropy
         entropy = - (probs_distribution * torch.log(probs_distribution)).sum(dim=-1)
         return entropy
 
 
-class BAITforOpenAI(BAIT):
-    pass
