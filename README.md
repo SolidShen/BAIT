@@ -40,7 +40,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Model Zoo
+## Model Zoo (coming soon)
 
 ### File Structure
 
@@ -61,7 +61,7 @@ model_zoo/
 │   └── ...
 └── METADATA.csv
 ```
-```base_models``` stores pretrained LLMs downloaded from Huggingface. We currently evaluate BAIT on the following 8 LLM architectures:
+```base_models``` stores pretrained LLMs downloaded from Huggingface. We evaluate BAIT on the following 8 LLM architectures:
 
 - Llama-Series ([Llama2-7B-chat-hf](meta-llama/Llama-2-7b-chat-hf), [Llama2-70B-chat-hf](https://huggingface.co/meta-llama/Llama-2-70b-chat-hf), [Llama-3-8B-Instruct](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct), [Llama-3-70B-Instruct](https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct))
 - Gemma-Series([Gemma-7B](https://huggingface.co/google/gemma-7b), [Gemma2-27B](https://huggingface.co/google/gemma-2-27b)) 
@@ -78,26 +78,31 @@ The ```models``` directory contains fine-tuned models, both benign and backdoore
 
 The ```METADATA.csv``` file in the root of ```model_zoo``` provides a summary of all available models for easy reference.
 
-
-### LLM Backdoor Attacks
-
-We current include 6 types of LLM backdoor attacks
-
-
 ## LLM Backdoor Scanning
+
+To perform BAIT on the entire model zoo, run the scanning script:
+
+```bash
+bash script/scan_cba.sh
+```
+
+This script will iteratively scan each LLM stored in ```model_zoo/models```, the intermidiate log and final results will be stored in ```result``` folder.
 
 ## Evaluation
 
-## Acknowledgement
+To evaluate the effectiveness of BAIT:
 
-## Citation
+1. Run the evaluation script:
+
+```python
+python eval.py \
+--test_dir /path/to/result \
+--output_dir /path/to/save
+```
+
+This script will compute key metrics such as detection rate, false positive rate, and accuracy for the backdoor detection.
 
 
-## TODO
-- [ ] rename all cba peft model "checkpoint-number" to "model"
-- [ ] add METADATA.csv in model_zoo folder
-- [ ] change model zoo structure to id-xxxx, and parse all info from config file
-- [ ] test on all cba models
 
 
 
