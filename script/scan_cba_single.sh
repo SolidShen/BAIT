@@ -1,6 +1,5 @@
-gpu="2"
+gpu="0"
 
-# enumerate all models stored in model_zoo/models
 python -m bait.main \
     --base_model "meta-llama/Llama-2-7b-hf" \
     --adapter_path "model_zoo/models/id-0009/model" \
@@ -11,4 +10,3 @@ python -m bait.main \
     --gpu $gpu \
     --output_dir "result" \
     --project_name "bait_cba_debug" 
-
