@@ -2,7 +2,7 @@
 
 *🔥🔥🔥 Detecting hidden backdoors in Large Language Models with only black-box access*
 
-**BAIT: Large Language Model Backdoor Scanning by Inverting Attack Target** [[S&P'25](/)] <br>
+**BAIT: Large Language Model Backdoor Scanning by Inverting Attack Target** <br>
 [Guangyu Shen*](https://sites.google.com/view/guangyushen/home),
 [Siyuan Cheng*](https://www.cs.purdue.edu/homes/cheng535/),
 [Zhuo Zhang](https://www.cs.purdue.edu/homes/zhan3299/),
