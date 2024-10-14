@@ -115,3 +115,6 @@ tmp/
 ####################
 # Add any project-specific files or directories you want to ignore
 *.code-workspace
+
+debug_bait/
+script/debug_causality.sh
