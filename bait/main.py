@@ -25,7 +25,6 @@ from bait.constants import SEED
 from transformers.utils import logging
 import os
 import json
-from datetime import datetime
 from pprint import pprint
 from bait.bait import BAIT
 
