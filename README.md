@@ -15,6 +15,9 @@
 [Shiqing Ma](https://people.cs.umass.edu/~shiqingma/),
 [Xiangyu Zhang](https://www.cs.purdue.edu/homes/xyzhang/) (*Equal Contribution)
 
+## News
+- 🎉🎉🎉  [Nov 10, 2024] BAIT won the third place (with the highest recall score) and the most efficient method in the [The Competition for LLM and Agent Safety 2024 (CLAS 2024) - Backdoor Trigger Recovery for Models Track](https://www.llmagentsafetycomp24.com/leaderboards/) ! The competition version of BAIT will be released soon.
+
 ## Contents
 - [Install](#install)
 - [Model Zoo](#model-zoo)
