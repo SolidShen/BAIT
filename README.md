@@ -2,7 +2,7 @@
 
 *🔥🔥🔥 Detecting hidden backdoors in Large Language Models with only black-box access*
 
-**BAIT: Large Language Model Backdoor Scanning by Inverting Attack Target** <br>
+**BAIT: Large Language Model Backdoor Scanning by Inverting Attack Target** [[Paper]](https://www.cs.purdue.edu/homes/shen447/files/paper/sp25_bait.pdf) <br>
 [Guangyu Shen*](https://sites.google.com/view/guangyushen/home),
 [Siyuan Cheng*](https://www.cs.purdue.edu/homes/cheng535/),
 [Zhuo Zhang](https://www.cs.purdue.edu/homes/zhan3299/),
@@ -14,7 +14,7 @@
 [Shengwei An](https://www.cs.purdue.edu/homes/an93/),
 [Shiqing Ma](https://people.cs.umass.edu/~shiqingma/),
 [Xiangyu Zhang](https://www.cs.purdue.edu/homes/xyzhang/) (*Equal Contribution) <br>
-[[Paper]](https://www.cs.purdue.edu/homes/shen447/files/paper/sp25_bait.pdf)
+Proceedings of the 46th IEEE Symposium on Security and Privacy (**S&P 2025**)
 
 ## News
 - 🎉🎉🎉  **[Nov 10, 2024]** BAIT won the third place (with the highest recall score) and the most efficient method in the [The Competition for LLM and Agent Safety 2024 (CLAS 2024) - Backdoor Trigger Recovery for Models Track](https://www.llmagentsafetycomp24.com/leaderboards/) ! The competition version of BAIT will be released soon.
