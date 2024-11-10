@@ -13,7 +13,8 @@
 [Xiaolong Jin](https://scholar.google.com/citations?user=w1-1dYwAAAAJ&hl=en),
 [Shengwei An](https://www.cs.purdue.edu/homes/an93/),
 [Shiqing Ma](https://people.cs.umass.edu/~shiqingma/),
-[Xiangyu Zhang](https://www.cs.purdue.edu/homes/xyzhang/) (*Equal Contribution)
+[Xiangyu Zhang](https://www.cs.purdue.edu/homes/xyzhang/) (*Equal Contribution) <br>
+[[Paper]](https://www.cs.purdue.edu/homes/shen447/files/paper/sp25_bait.pdf)
 
 ## News
 - 🎉🎉🎉  **[Nov 10, 2024]** BAIT won the third place (with the highest recall score) and the most efficient method in the [The Competition for LLM and Agent Safety 2024 (CLAS 2024) - Backdoor Trigger Recovery for Models Track](https://www.llmagentsafetycomp24.com/leaderboards/) ! The competition version of BAIT will be released soon.
